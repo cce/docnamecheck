@@ -26,14 +26,70 @@ var (
 	includeInterfaceMethodsFlag = false
 	allowedLeadingWordsFlag     = defaultAllowedLeadingWords
 	allowedPrefixesFlag         = ""
-	allowedLeadingWords         = map[string]struct{}{}
-	allowedPrefixes             []string
 )
+
+type matchConfig struct {
+	allowedLeadingWords map[string]struct{}
+	allowedPrefixes     []string
+}
+
+func (c matchConfig) isAllowedLeadingWord(word string) bool {
+	if word == "" || len(c.allowedLeadingWords) == 0 {
+		return false
+	}
+	_, ok := c.allowedLeadingWords[strings.ToLower(word)]
+	return ok
+}
+
+func (c matchConfig) matchesAllowedPrefixVariant(docToken, symbol string) bool {
+	if len(c.allowedPrefixes) == 0 {
+		return false
+	}
+	symbolLower := strings.ToLower(symbol)
+	for _, rawPrefix := range c.allowedPrefixes {
+		prefix := strings.TrimSpace(rawPrefix)
+		if prefix == "" {
+			continue
+		}
+		if len(symbol) <= len(prefix) {
+			continue
+		}
+		if !strings.HasPrefix(symbolLower, strings.ToLower(prefix)) {
+			continue
+		}
+		trimmed := symbol[len(prefix):]
+		if trimmed == "" {
+			continue
+		}
+		if strings.EqualFold(docToken, trimmed) {
+			return true
+		}
+	}
+	return false
+}
 
 const (
 	minDocTokenLen   = 3
 	maxChunkDiffSize = 6
 )
+
+func newMatchConfig() matchConfig {
+	return matchConfig{
+		allowedLeadingWords: buildAllowedLeadingWords(allowedLeadingWordsFlag),
+		allowedPrefixes:     splitCSV(allowedPrefixesFlag),
+	}
+}
+
+func buildAllowedLeadingWords(raw string) map[string]struct{} {
+	words := make(map[string]struct{})
+	for _, w := range splitCSV(raw) {
+		if w == "" {
+			continue
+		}
+		words[strings.ToLower(w)] = struct{}{}
+	}
+	return words
+}
 
 // Analyzer implements the check.
 var Analyzer = &analysis.Analyzer{
@@ -55,8 +111,7 @@ func init() {
 }
 
 func run(pass *analysis.Pass) (any, error) {
-	setAllowedLeadingWords(allowedLeadingWordsFlag)
-	setAllowedPrefixes(allowedPrefixesFlag)
+	cfg := newMatchConfig()
 
 	tokenToAST := make(map[*token.File]*ast.File, len(pass.Files))
 	for _, f := range pass.Files {
@@ -82,7 +137,7 @@ func run(pass *analysis.Pass) (any, error) {
 			if node.Doc == nil || node.Name == nil {
 				return
 			}
-			checkSymbol(pass, node.Doc, node.Name.Name, ast.IsExported(node.Name.Name), kindFunc, node.Name.Pos())
+			checkSymbol(pass, cfg, node.Doc, node.Name.Name, ast.IsExported(node.Name.Name), kindFunc, node.Name.Pos())
 		case *ast.GenDecl:
 			if node.Tok != token.TYPE {
 				return
@@ -98,12 +153,12 @@ func run(pass *analysis.Pass) (any, error) {
 						doc = node.Doc
 					}
 					if doc != nil {
-						checkSymbol(pass, doc, ts.Name.Name, ast.IsExported(ts.Name.Name), kindType, ts.Name.Pos())
+						checkSymbol(pass, cfg, doc, ts.Name.Name, ast.IsExported(ts.Name.Name), kindType, ts.Name.Pos())
 					}
 				}
 				if includeInterfaceMethodsFlag {
 					if iface, ok := ts.Type.(*ast.InterfaceType); ok {
-						checkInterfaceMethods(pass, iface)
+						checkInterfaceMethods(pass, cfg, iface)
 					}
 				}
 			}
@@ -119,7 +174,7 @@ const (
 	kindType
 )
 
-func checkSymbol(pass *analysis.Pass, doc *ast.CommentGroup, name string, exported bool, kind symbolKind, declPos token.Pos) {
+func checkSymbol(pass *analysis.Pass, cfg matchConfig, doc *ast.CommentGroup, name string, exported bool, kind symbolKind, declPos token.Pos) {
 	if name == "" || doc == nil {
 		return
 	}
@@ -137,11 +192,11 @@ func checkSymbol(pass *analysis.Pass, doc *ast.CommentGroup, name string, export
 		return
 	}
 
-	if isAllowedLeadingWord(firstTok) {
+	if cfg.isAllowedLeadingWord(firstTok) {
 		return
 	}
 
-	if matchesAllowedPrefixVariant(firstTok, name) {
+	if cfg.matchesAllowedPrefixVariant(firstTok, name) {
 		return
 	}
 
@@ -328,7 +383,7 @@ func isWordBoundary(b byte) bool {
 	return false
 }
 
-func checkInterfaceMethods(pass *analysis.Pass, iface *ast.InterfaceType) {
+func checkInterfaceMethods(pass *analysis.Pass, cfg matchConfig, iface *ast.InterfaceType) {
 	if iface == nil || iface.Methods == nil {
 		return
 	}
@@ -347,7 +402,7 @@ func checkInterfaceMethods(pass *analysis.Pass, iface *ast.InterfaceType) {
 			if name == nil {
 				continue
 			}
-			checkSymbol(pass, doc, name.Name, ast.IsExported(name.Name), kindFunc, name.Pos())
+			checkSymbol(pass, cfg, doc, name.Name, ast.IsExported(name.Name), kindFunc, name.Pos())
 		}
 	}
 }
@@ -426,55 +481,6 @@ func extractIdentifierToken(word string) (string, int) {
 		return id, removed
 	}
 	return "", 0
-}
-
-func matchesAllowedPrefixVariant(docToken, symbol string) bool {
-	if len(allowedPrefixes) == 0 {
-		return false
-	}
-	symbolLower := strings.ToLower(symbol)
-	for _, rawPrefix := range allowedPrefixes {
-		prefix := strings.TrimSpace(rawPrefix)
-		if prefix == "" {
-			continue
-		}
-		if len(symbol) <= len(prefix) {
-			continue
-		}
-		if !strings.HasPrefix(symbolLower, strings.ToLower(prefix)) {
-			continue
-		}
-		trimmed := symbol[len(prefix):]
-		if trimmed == "" {
-			continue
-		}
-		if strings.EqualFold(docToken, trimmed) {
-			return true
-		}
-	}
-	return false
-}
-
-func isAllowedLeadingWord(word string) bool {
-	if word == "" {
-		return false
-	}
-	_, ok := allowedLeadingWords[strings.ToLower(word)]
-	return ok
-}
-
-func setAllowedLeadingWords(raw string) {
-	allowedLeadingWords = make(map[string]struct{})
-	for _, w := range splitCSV(raw) {
-		if w == "" {
-			continue
-		}
-		allowedLeadingWords[strings.ToLower(w)] = struct{}{}
-	}
-}
-
-func setAllowedPrefixes(raw string) {
-	allowedPrefixes = splitCSV(raw)
 }
 
 func splitCSV(raw string) []string {
