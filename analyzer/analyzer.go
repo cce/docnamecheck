@@ -15,7 +15,7 @@ import (
 	"golang.org/x/tools/go/ast/inspector"
 )
 
-const defaultAllowedLeadingWords = "create,creates,creating,initialize,initializes,init,setup,setups,start,starts,read,reads,write,writes,send,sends,generate,generates,decode,decodes,encode,encodes,marshal,marshals,unmarshal,unmarshals,apply,applies,process,processes,make,makes,build,builds,lookup,lookups"
+const defaultAllowedLeadingWords = "create,creates,creating,initialize,initializes,init,configure,configures,setup,setups,start,starts,read,reads,write,writes,send,sends,generate,generates,decode,decodes,encode,encodes,marshal,marshals,unmarshal,unmarshals,apply,applies,process,processes,make,makes,build,builds,test,tests"
 
 var (
 	maxDistFlag                 = 1

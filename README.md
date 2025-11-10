@@ -29,7 +29,7 @@ The analyzer understands several flags:
 | `-include-types` | `false` | Extend the check to `type` declarations (honoring the exported/unexported switches above). |
 | `-include-generated` | `false` | Include files that carry the `// Code generated ... DO NOT EDIT.` header; off by default to avoid noisy generated code. |
 | `-include-interface-methods` | `false` | Check interface method declarations. Useful when interface docs must track implementation names. |
-| `-allowed-leading-words` | `create,creates,...,lookups` | Comma-separated verbs that should be treated as narrative intros (e.g. `Create`, `Setup`); matching comments are skipped. |
+| `-allowed-leading-words` | *(see note)* | Comma-separated verbs treated as narrative intros (e.g. `Create`, `Configure`, `Tests`); matching comments are skipped. |
 | `-allowed-prefixes` | `` | Comma-separated list of symbol prefixes (such as `op`) that may be stripped before comparing to the doc token. |
 
 The heuristics intentionally skip obviously narrative comments (`generates keys ...`), `NOTE:`/`TODO:` labels, and cases
@@ -37,6 +37,8 @@ where the prefix/suffix diverges too much, so you only hear about comments that 
 symbol name. For repositories with consistently prefixed helpers (e.g. `opThing`) or doc sentences that start with
 imperative verbs ("Create", "Setup", "Read"), use `-allowed-prefixes` and `-allowed-leading-words` to keep the report
 focused on true typos.
+
+> **Note:** the default `-allowed-leading-words` list is `create,creates,creating,initialize,initializes,init,configure,configures,setup,setups,start,starts,read,reads,write,writes,send,sends,generate,generates,decode,decodes,encode,encodes,marshal,marshals,unmarshal,unmarshals,apply,applies,process,processes,make,makes,build,builds,test,tests`.
 
 ## golangci-lint module plugin
 
