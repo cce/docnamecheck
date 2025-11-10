@@ -32,3 +32,16 @@ func generateKeys() {}
 
 // note: helper for tests (label should be skipped)
 func notify() {}
+
+// ServeHTTP handles requests but the identifier is unexported so the analyzer should still flag it.
+func serveHHTP() {} // want `doc comment starts with 'ServeHTTP' but symbol is 'serveHHTP' \(possible typo or old name\)`
+
+/**
+ * ServeHTTPBlock handles requests but block comments currently confuse the tokenizer.
+ */
+func serveHHTPBlock() {} // want `doc comment starts with 'ServeHTTPBlock' but symbol is 'serveHHTPBlock' \(possible typo or old name\)`
+
+type handler interface {
+	// ServeHTTP handles requests in interface declarations as well.
+	serveHHTP()
+}

@@ -15,11 +15,12 @@ import (
 )
 
 var (
-	maxDistFlag           = 1
-	includeUnexportedFlag = true
-	includeExportedFlag   = false
-	includeTypesFlag      = false
-	includeGeneratedFlag  = false
+	maxDistFlag                 = 1
+	includeUnexportedFlag       = true
+	includeExportedFlag         = false
+	includeTypesFlag            = false
+	includeGeneratedFlag        = false
+	includeInterfaceMethodsFlag = false
 )
 
 const (
@@ -41,6 +42,7 @@ func init() {
 	Analyzer.Flags.BoolVar(&includeExportedFlag, "include-exported", false, "check exported declarations (disabled by default)")
 	Analyzer.Flags.BoolVar(&includeTypesFlag, "include-types", false, "also check type declarations")
 	Analyzer.Flags.BoolVar(&includeGeneratedFlag, "include-generated", false, "check files marked as generated")
+	Analyzer.Flags.BoolVar(&includeInterfaceMethodsFlag, "include-interface-methods", false, "check interface method declarations")
 }
 
 func run(pass *analysis.Pass) (any, error) {
@@ -70,7 +72,7 @@ func run(pass *analysis.Pass) (any, error) {
 			}
 			checkSymbol(pass, node.Doc, node.Name.Name, ast.IsExported(node.Name.Name), kindFunc, node.Name.Pos())
 		case *ast.GenDecl:
-			if node.Tok != token.TYPE || !includeTypesFlag {
+			if node.Tok != token.TYPE {
 				return
 			}
 			for _, spec := range node.Specs {
@@ -78,14 +80,20 @@ func run(pass *analysis.Pass) (any, error) {
 				if !ok || ts.Name == nil {
 					continue
 				}
-				doc := ts.Doc
-				if doc == nil {
-					doc = node.Doc
+				if includeTypesFlag {
+					doc := ts.Doc
+					if doc == nil {
+						doc = node.Doc
+					}
+					if doc != nil {
+						checkSymbol(pass, doc, ts.Name.Name, ast.IsExported(ts.Name.Name), kindType, ts.Name.Pos())
+					}
 				}
-				if doc == nil {
-					continue
+				if includeInterfaceMethodsFlag {
+					if iface, ok := ts.Type.(*ast.InterfaceType); ok {
+						checkInterfaceMethods(pass, iface)
+					}
 				}
-				checkSymbol(pass, doc, ts.Name.Name, ast.IsExported(ts.Name.Name), kindType, ts.Name.Pos())
 			}
 		}
 	})
@@ -118,10 +126,6 @@ func checkSymbol(pass *analysis.Pass, doc *ast.CommentGroup, name string, export
 	}
 
 	if kind == kindFunc && isNarrativeVerbForm(firstTok, name) {
-		return
-	}
-
-	if !exported && isUpperFirstRune(firstTok) {
 		return
 	}
 
@@ -161,23 +165,40 @@ func firstIdentifierLike(cg *ast.CommentGroup) (string, token.Pos) {
 	if cg == nil || len(cg.List) == 0 {
 		return "", token.NoPos
 	}
-	// Use the text of the first comment in the group; godoc rules expect the lead sentence there.
-	text := cg.List[0].Text
-	// Trim comment markers.
-	text = strings.TrimPrefix(text, "//")
-	text = strings.TrimPrefix(text, "/*")
-	text = strings.TrimSuffix(text, "*/")
-	line := strings.TrimSpace(text)
+	line := firstDocLine(cg.List[0].Text)
 	if line == "" {
 		return "", token.NoPos
 	}
+	if id := identifierFromLine(line); id != "" {
+		return id, cg.List[0].Slash
+	}
+	return "", token.NoPos
+}
 
-	// Split by spaces; scan tokens, skipping well-known prefixes.
+func firstDocLine(raw string) string {
+	text := strings.TrimPrefix(raw, "//")
+	text = strings.TrimPrefix(text, "/*")
+	text = strings.TrimSuffix(text, "*/")
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		line = strings.TrimLeft(line, "*\t ")
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		return line
+	}
+	return ""
+}
+
+func identifierFromLine(line string) string {
 	fields := strings.Fields(line)
 	if len(fields) == 0 {
-		return "", token.NoPos
+		return ""
 	}
-	// Skip labels like Deprecated:, TODO:, NOTE: etc.
 	start := 0
 	for start < len(fields) {
 		w := strings.Trim(fields[start], ",.;:()[]{}\t ")
@@ -186,14 +207,36 @@ func firstIdentifierLike(cg *ast.CommentGroup) (string, token.Pos) {
 			start++
 			continue
 		}
-		// First non-skippable word: strip punctuation and keep identifier run.
-		id := extractIdentifierToken(w)
-		if id != "" {
-			return id, cg.List[0].Slash
+		if id := extractIdentifierToken(w); id != "" {
+			return id
 		}
 		break
 	}
-	return "", token.NoPos
+	return ""
+}
+
+func checkInterfaceMethods(pass *analysis.Pass, iface *ast.InterfaceType) {
+	if iface == nil || iface.Methods == nil {
+		return
+	}
+	for _, field := range iface.Methods.List {
+		if field == nil || len(field.Names) == 0 {
+			continue
+		}
+		doc := field.Doc
+		if doc == nil {
+			doc = field.Comment
+		}
+		if doc == nil {
+			continue
+		}
+		for _, name := range field.Names {
+			if name == nil {
+				continue
+			}
+			checkSymbol(pass, doc, name.Name, ast.IsExported(name.Name), kindFunc, name.Pos())
+		}
+	}
 }
 
 func isSkippableLabel(w string) bool {
@@ -378,13 +421,6 @@ func camelWordBoundary(runes []rune, idx int) bool {
 		if idx+1 < len(runes) && unicode.IsLower(runes[idx+1]) {
 			return true
 		}
-	}
-	return false
-}
-
-func isUpperFirstRune(s string) bool {
-	for _, r := range s {
-		return 'A' <= r && r <= 'Z'
 	}
 	return false
 }

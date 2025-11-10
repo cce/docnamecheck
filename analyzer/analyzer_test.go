@@ -25,6 +25,12 @@ func TestAnalyzer(t *testing.T) {
 		includeGeneratedFlag = true
 		analysistest.Run(t, analysistest.TestData(), Analyzer, "generatedcode")
 	})
+
+	t.Run("interfaceMethodsOptIn", func(t *testing.T) {
+		resetFlags()
+		includeInterfaceMethodsFlag = true
+		analysistest.Run(t, analysistest.TestData(), Analyzer, "interfaces")
+	})
 }
 
 func resetFlags() {
@@ -33,4 +39,5 @@ func resetFlags() {
 	includeExportedFlag = false
 	includeTypesFlag = false
 	includeGeneratedFlag = false
+	includeInterfaceMethodsFlag = false
 }
