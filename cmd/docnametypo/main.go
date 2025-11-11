@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/cce/docnamecheck/analyzer"
+	"github.com/cce/docnametypo/analyzer"
 	"golang.org/x/tools/go/analysis/singlechecker"
 )
 

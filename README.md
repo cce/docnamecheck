@@ -1,17 +1,17 @@
-# docnamecheck
+# docnametypo
 
-[![build and test](https://github.com/cce/docnamecheck/actions/workflows/test.yml/badge.svg)](https://github.com/cce/docnamecheck/actions/workflows/test.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/cce/docnamecheck.svg)](https://pkg.go.dev/github.com/cce/docnamecheck)
-[![Go Report Card](https://goreportcard.com/badge/github.com/cce/docnamecheck)](https://goreportcard.com/report/github.com/cce/docnamecheck)
+[![build and test](https://github.com/cce/docnametypo/actions/workflows/test.yml/badge.svg)](https://github.com/cce/docnametypo/actions/workflows/test.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/cce/docnametypo.svg)](https://pkg.go.dev/github.com/cce/docnametypo)
+[![Go Report Card](https://goreportcard.com/badge/github.com/cce/docnametypo)](https://goreportcard.com/report/github.com/cce/docnametypo)
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
 _Detect when the first word of Go doc comments intended to reference the identifier, but had a typo._
 
-`docnamecheck` is a linter that doesn't require all functions to have doc comments, but checks for typos when they do. It analyzes the first word in doc comments to see whether it's attempting to reference the identifier name, and flags cases where it seems to intend to, but doesn't match (due to typos, renaming, etc). All other comment styles, or no comments at all, are freely allowed.
+`docnametypo` is a linter that doesn't require all functions to have doc comments, but checks for typos when they do. It analyzes the first word in doc comments to see whether it's attempting to reference the identifier name, and flags cases where it seems to intend to, but doesn't match (due to typos, renaming, etc). All other comment styles, or no comments at all, are freely allowed.
 
 ## Table of Contents
 
-- [Why docnamecheck?](#why-docnamecheck)
+- [Why docnametypo?](#why-docnametypo)
 - [Installation](#installation)
 - [Usage](#usage)
 - [golangci-lint Integration](#golangci-lint-module-plugin)
@@ -20,7 +20,7 @@ _Detect when the first word of Go doc comments intended to reference the identif
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
 
-## Why docnamecheck?
+## Why docnametypo?
 
 Does your codebase sometimes start doc comments with the function or type name, but not always? Do you follow stricter doc comment rules with exported functions than unexported functions? Many codebases follow a relaxed documentation style that allows both, especially for unexported functions:
 
@@ -32,7 +32,7 @@ func parseConfig(path string) error { ... }
 func parseManifest(path string) (*Manifest, error) { ... }
 ```
 
-If you're using linters like [`revive`](https://github.com/mgechev/revive), [`godoc-lint`](https://github.com/godoc-lint/godoc-lint) or [`staticcheck`](https://staticcheck.dev/), they may enforce strict `// FunctionName does ...` formatting for exported functions. But for unexported code, your codebase might not follow this rule consistently, and that's fine. `docnamecheck` is designed to complement these existing linters and catch typos.
+If you're using linters like [`revive`](https://github.com/mgechev/revive), [`godoc-lint`](https://github.com/godoc-lint/godoc-lint) or [`staticcheck`](https://staticcheck.dev/), they may enforce strict `// FunctionName does ...` formatting for exported functions. But for unexported code, your codebase might not follow this rule consistently, and that's fine. `docnametypo` is designed to complement these existing linters and catch typos.
 
 **The problem:** When you refactor code, it's easy to miss updating doc comments that referenced the old name:
 
@@ -44,11 +44,11 @@ func parseManifest(path string) error { ... }
 func ServeHTTP(w http.ResponseWriter, r *http.Request) { ... }
 ```
 
-**The solution:** `docnamecheck` uses heuristics to understand the author's intent. It analyzes whether a comment appears to be trying to use the symbol name (and got it wrong), or not. The tool catches actual mistakes, while staying out of your way when you're writing freely. This lets your codebase maintain a loose practice for documenting code: sometimes using the function name as the first word, sometimes not. This practice can be limited to unexported functions and types, and optionally also include exported functions.
+**The solution:** `docnametypo` uses heuristics to understand the author's intent. It analyzes whether a comment appears to be trying to use the symbol name (and got it wrong), or not. The tool catches actual mistakes, while staying out of your way when you're writing freely. This lets your codebase maintain a loose practice for documenting code: sometimes using the function name as the first word, sometimes not. This practice can be limited to unexported functions and types, and optionally also include exported functions.
 
 ### How it understands intent
 
-`docnamecheck` uses multiple strategies:
+`docnametypo` uses multiple strategies:
 
 - **Damerau-Levenshtein distance**: Catches typos and single-character transpositions (`confgure` vs `configure`)
 - **CamelCase analysis**: Detects reordered words (`JSONEncoder` vs `EncoderJSON`) or missing chunks (`TelemetryHistoryState` vs `TelemetryHistory`)
@@ -61,13 +61,13 @@ These heuristics work together to distinguish probable typos from other types of
 ## Installation
 
 ```bash
-go install github.com/cce/docnamecheck/cmd/docnamecheck@latest
+go install github.com/cce/docnametypo/cmd/docnametypo@latest
 ```
 
 ## Usage
 
 ```bash
-docnamecheck ./...
+docnametypo ./...
 ```
 
 The analyzer understands several flags:
@@ -89,17 +89,17 @@ The analyzer understands several flags:
 
 ### Applying Fixes
 
-`docnamecheck` emits suggested fixes that rewrite the incorrect identifier token in the doc comment. Run:
+`docnametypo` emits suggested fixes that rewrite the incorrect identifier token in the doc comment. Run:
 
 ```bash
-docnamecheck -fix ./...
+docnametypo -fix ./...
 ```
 
 to automatically apply those edits. The golangci-lint module plugin also respects `golangci-lint run --fix`, which can configured to apply additional filtering on which paths to include or exclude.
 
 ## golangci-lint Integration
 
-`docnamecheck` ships a golangci-lint module plugin. To integrate it:
+`docnametypo` ships a golangci-lint module plugin. To integrate it:
 
 1. Create `.custom-gcl.yml` next to your `go.mod`:
 
@@ -108,8 +108,8 @@ to automatically apply those edits. The golangci-lint module plugin also respect
    version: v2.5.0
    name: custom-golangci-lint
    plugins:
-     - module: github.com/cce/docnamecheck
-       import: github.com/cce/docnamecheck/gclplugin
+     - module: github.com/cce/docnametypo
+       import: github.com/cce/docnametypo/gclplugin
        version: main # or a tagged release
    ```
 
@@ -122,13 +122,13 @@ to automatically apply those edits. The golangci-lint module plugin also respect
    version: "2"
    linters:
      enable:
-       - docnamecheck
+       - docnametypo
      settings:
        custom:
-         docnamecheck:
+         docnametypo:
            type: module
-           description: "docnamecheck catches doc comments whose first token drifted from the actual name"
-           original-url: "https://github.com/cce/docnamecheck"
+           description: "docnametypo catches doc comments whose first token drifted from the actual name"
+           original-url: "https://github.com/cce/docnametypo"
            settings:
              include-exported: true
              include-interface-methods: true
@@ -141,7 +141,7 @@ to automatically apply those edits. The golangci-lint module plugin also respect
 
 ## Examples & Configuration
 
-### What docnamecheck Reports
+### What docnametypo Reports
 
 **Before:**
 ```go
@@ -197,7 +197,7 @@ func generateKeys() []byte { ... }  <- This is fine (narrative verb)
 If your codebase uses narrative verbs like in the examples above, the default `-allowed-leading-words` list already covers common cases (`create`, `generate`, `configure`, etc.). If you use additional narrative verbs, add them:
 
 ```bash
-docnamecheck -allowed-leading-words=create,configure,setup,validate,process,handle ./...
+docnametypo -allowed-leading-words=create,configure,setup,validate,process,handle ./...
 ```
 
 #### Prefixed helpers
@@ -215,14 +215,14 @@ func uiRegister() { ... }  <- Without -allowed-prefixes, this would be flagged
 Configure the allowed prefixes:
 
 ```bash
-docnamecheck -allowed-prefixes=op,ui ./...
+docnametypo -allowed-prefixes=op,ui ./...
 ```
 
 This allows doc comments to reference `Thing` in the first word when the function is `opThing`, without flagging it as a typo.
 
 ## How It Works
 
-`docnamecheck` uses multiple string matching algorithms to detect likely typos while avoiding false positives on legitimate narrative comments:
+`docnametypo` uses multiple string matching algorithms to detect likely typos while avoiding false positives on legitimate narrative comments:
 
 1. **Extracts the first identifier-like token** from doc comments, skipping labels such as `Deprecated:`, `TODO:`, `NOTE:`, etc.
 
@@ -251,17 +251,17 @@ Because the analyzer is heuristic, the defaults stay conservative: only unexport
 Add common starting verbs to the allowed list:
 
 ```bash
-docnamecheck -allowed-leading-words=create,configure,setup,handle,process ./...
+docnametypo -allowed-leading-words=create,configure,setup,handle,process ./...
 ```
 
 Or extend the default list:
 
 ```bash
 # Check current defaults
-docnamecheck -h | grep allowed-leading-words
+docnametypo -h | grep allowed-leading-words
 
 # Add your own words to the list
-docnamecheck -allowed-leading-words=create,...,yourword ./...
+docnametypo -allowed-leading-words=create,...,yourword ./...
 ```
 
 ### "It's flagging comments on generated code"
@@ -279,7 +279,7 @@ or use this linter as a golangci-lint plugin with the [`generated: lax`](https:/
 If your codebase uses consistent prefixes (e.g., all UI helpers start with `ui`), use:
 
 ```bash
-docnamecheck -allowed-prefixes=ui ./...
+docnametypo -allowed-prefixes=ui ./...
 ```
 
 ### "How do I run this in CI?"
@@ -287,11 +287,11 @@ docnamecheck -allowed-prefixes=ui ./...
 Add to your GitHub Actions workflow:
 
 ```yaml
-- name: Install docnamecheck
-  run: go install github.com/cce/docnamecheck/cmd/docnamecheck@latest
+- name: Install docnametypo
+  run: go install github.com/cce/docnametypo/cmd/docnametypo@latest
 
-- name: Run docnamecheck
-  run: docnamecheck ./...
+- name: Run docnametypo
+  run: docnametypo ./...
 ```
 
 Or integrate via golangci-lint (see [integration section](#golangci-lint-module-plugin)).
@@ -302,4 +302,4 @@ This project is licensed under the [BSD 3-Clause License](LICENSE).
 
 ---
 
-**Found a bug or have a feature request?** [Open an issue](https://github.com/cce/docnamecheck/issues) on GitHub.
+**Found a bug or have a feature request?** [Open an issue](https://github.com/cce/docnametypo/issues) on GitHub.

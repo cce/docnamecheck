@@ -92,22 +92,26 @@ func buildAllowedLeadingWords(raw string) map[string]struct{} {
 }
 
 // Analyzer implements the check.
-var Analyzer = &analysis.Analyzer{
-	Name:     "docnamecheck",
-	Doc:      "flag doc comments that start with an identifier very similar to the symbol's name (probable typo/stale)",
-	Run:      run,
-	Requires: []*analysis.Analyzer{inspect.Analyzer},
-}
+var Analyzer = newAnalyzer()
 
-func init() {
-	Analyzer.Flags.IntVar(&maxDistFlag, "maxdist", 1, "maximum Damerau-Levenshtein distance to consider a likely typo")
-	Analyzer.Flags.BoolVar(&includeUnexportedFlag, "include-unexported", true, "check unexported declarations")
-	Analyzer.Flags.BoolVar(&includeExportedFlag, "include-exported", false, "check exported declarations (disabled by default)")
-	Analyzer.Flags.BoolVar(&includeTypesFlag, "include-types", false, "also check type declarations")
-	Analyzer.Flags.BoolVar(&includeGeneratedFlag, "include-generated", false, "check files marked as generated")
-	Analyzer.Flags.BoolVar(&includeInterfaceMethodsFlag, "include-interface-methods", false, "check interface method declarations")
-	Analyzer.Flags.StringVar(&allowedLeadingWordsFlag, "allowed-leading-words", defaultAllowedLeadingWords, "comma-separated list of leading words to ignore (treated as narrative)")
-	Analyzer.Flags.StringVar(&allowedPrefixesFlag, "allowed-prefixes", "", "comma-separated list of symbol prefixes to ignore when matching doc tokens")
+func newAnalyzer() *analysis.Analyzer {
+	a := &analysis.Analyzer{
+		Name:     "docnametypo",
+		Doc:      "flag doc comments that start with an identifier very similar to the symbol's name (probable typo/stale)",
+		Run:      run,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
+	}
+
+	a.Flags.IntVar(&maxDistFlag, "maxdist", 1, "maximum Damerau-Levenshtein distance to consider a likely typo")
+	a.Flags.BoolVar(&includeUnexportedFlag, "include-unexported", true, "check unexported declarations")
+	a.Flags.BoolVar(&includeExportedFlag, "include-exported", false, "check exported declarations (disabled by default)")
+	a.Flags.BoolVar(&includeTypesFlag, "include-types", false, "also check type declarations")
+	a.Flags.BoolVar(&includeGeneratedFlag, "include-generated", false, "check files marked as generated")
+	a.Flags.BoolVar(&includeInterfaceMethodsFlag, "include-interface-methods", false, "check interface method declarations")
+	a.Flags.StringVar(&allowedLeadingWordsFlag, "allowed-leading-words", defaultAllowedLeadingWords, "comma-separated list of leading words to ignore (treated as narrative)")
+	a.Flags.StringVar(&allowedPrefixesFlag, "allowed-prefixes", "", "comma-separated list of symbol prefixes to ignore when matching doc tokens")
+
+	return a
 }
 
 func run(pass *analysis.Pass) (any, error) {
