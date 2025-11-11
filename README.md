@@ -5,27 +5,24 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/cce/docnamecheck)](https://goreportcard.com/report/github.com/cce/docnamecheck)
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
-_Detect when Go doc comments probably meant to reference the identifier but got it wrong._
+_Detect when the first word of Go doc comments intended to reference the identifier, but had a typo._
 
-`docnamecheck` is a linter that analyzes the first word in doc comments to understand whether it's attempting to reference the identifier name. It flags cases where the comment's first word seems to intend to reference the identifier but doesn't match, due to typos, refactoring, or copy-paste errors, while allowing you to write narrative comments freely.
+`docnamecheck` is a linter that doesn't require all functions to have doc comments, but checks for typos when they do. It analyzes the first word in doc comments to see whether it's attempting to reference the identifier name, and flags cases where it seems to intend to, but doesn't match (due to typos, renaming, etc). All other comment styles, or no comments at all, are freely allowed.
 
 ## Table of Contents
 
 - [Why docnamecheck?](#why-docnamecheck)
-- [Quick Start](#quick-start)
-- [Examples](#examples)
 - [Installation](#installation)
 - [Usage](#usage)
 - [golangci-lint Integration](#golangci-lint-module-plugin)
+- [Examples & Configuration](#examples--configuration)
 - [How It Works](#how-it-works)
-- [Configuration Tips](#configuration-tips)
-- [Related Tools](#related-tools)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
 
 ## Why docnamecheck?
 
-Does your codebase sometimes start doc comments with the function or type name for unexported symbols, but not always? Many codebases use a relaxed documentation style that allows both:
+Does your codebase sometimes start doc comments with the function or type name, but not always? Do you follow stricter doc comment rules with exported functions than unexported functions? Many codebases follow a relaxed documentation style that allows both, especially for unexported functions:
 
 ```go
 // parseConfig reads and validates the configuration file
@@ -35,7 +32,7 @@ func parseConfig(path string) error { ... }
 func parseManifest(path string) (*Manifest, error) { ... }
 ```
 
-If you're using linters like `revive` or `go vet`, they'll enforce strict `// Name does X` formatting for exported functions. But for unexported code, your codebase might not follow this rule consistently, and that's fine.
+If you're using linters like [`revive`](https://github.com/mgechev/revive), [`godoc-lint`](https://github.com/godoc-lint/godoc-lint) or [`staticcheck`](https://staticcheck.dev/), they may enforce strict `// FunctionName does ...` formatting for exported functions. But for unexported code, your codebase might not follow this rule consistently, and that's fine. `docnamecheck` is designed to complement these existing linters and catch typos.
 
 **The problem:** When you refactor code, it's easy to miss updating doc comments that referenced the old name:
 
@@ -47,85 +44,19 @@ func parseManifest(path string) error { ... }
 func ServeHTTP(w http.ResponseWriter, r *http.Request) { ... }
 ```
 
-**The solution:** `docnamecheck` uses heuristics to understand your intent. It analyzes whether a comment appears to be trying to use the symbol name (and got it wrong) versus writing narrative prose (which is fine). The tool catches actual mistakes while staying out of your way for legitimate narrative comments.
+**The solution:** `docnamecheck` uses heuristics to understand the author's intent. It analyzes whether a comment appears to be trying to use the symbol name (and got it wrong), or not. The tool catches actual mistakes, while staying out of your way when you're writing freely. This lets your codebase maintain a loose practice for documenting code: sometimes using the function name as the first word, sometimes not. This practice can be limited to unexported functions and types, and optionally also include exported functions.
 
 ### How it understands intent
 
-`docnamecheck` uses multiple strategies to distinguish typos from narrative:
+`docnamecheck` uses multiple strategies:
 
 - **Damerau-Levenshtein distance**: Catches typos and single-character transpositions (`confgure` vs `configure`)
-- **CamelCase analysis**: Detects reordered words (`ServerHTTP` vs `ServeHTTP`) or missing chunks
-- **Capitalization patterns**: Flags `newHandler` when the function is `NewHandler`
+- **CamelCase analysis**: Detects reordered words (`JSONEncoder` vs `EncoderJSON`) or missing chunks (`TelemetryHistoryState` vs `TelemetryHistory`)
+- **Capitalization patterns**: Flags `NewHandler` in comments when the function is `newHandler`
 - **Narrative detection**: Skips comments starting with verbs like `Creates`, `Initializes`, `Generates`, etc.
 - **Prefix handling**: Allows configured prefixes like `op` to be stripped before matching
 
-This lets your codebase maintain a loose practice for documenting code—sometimes using the function name as the first word, sometimes not—while still catching cases where the comment clearly intended to reference the name but got it wrong.
-
-## Quick Start
-
-```bash
-# Install
-go install github.com/cce/docnamecheck/cmd/docnamecheck@latest
-
-# Run on your codebase
-docnamecheck ./...
-
-# Auto-fix issues
-docnamecheck -fix ./...
-```
-
-## Examples
-
-### What docnamecheck Reports
-
-**Before:**
-```go
-// ServerHTTP handles incoming HTTP requests and routes them
-// to the appropriate handler based on the request path.
-func ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    // implementation
-}
-```
-
-**Output:**
-```
-example.go:1:1: doc comment starts with "ServerHTTP" but function name is "ServeHTTP" (2 transposed camelCase words)
-```
-
-**After fix:**
-```go
-// ServeHTTP handles incoming HTTP requests and routes them
-// to the appropriate handler based on the request path.
-func ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    // implementation
-}
-```
-
-### More Examples
-
-**Levenshtein distance detection:**
-```go
-// confgure sets up the application  <- Typo: "confgure" vs "configure"
-func configure(app *App) error { ... }
-```
-
-**Prefix mismatch:**
-```go
-// newTelemetryHook creates a hook  <- Should be "NewTelemetryHook"
-func NewTelemetryHook() *Hook { ... }
-```
-
-**Narrative comments are allowed:**
-```go
-// Creates a new HTTP client  <- This is fine (starts with "Creates")
-func newHTTPClient() *Client { ... }
-
-// This helper generates test fixtures  <- This is fine (narrative)
-func makeTestData() []byte { ... }
-
-// Generates encryption keys for the session
-func generateKeys() []byte { ... }  <- This is fine (narrative verb)
-```
+These heuristics work together to distinguish probable typos from other types of comments.
 
 ## Installation
 
@@ -164,7 +95,7 @@ docnamecheck -fix ./...
 
 to automatically apply those edits. The golangci-lint module plugin also respects `golangci-lint run --fix`, so the same replacement happens when the linter runs inside larger pipelines.
 
-## golangci-lint Module Plugin
+## golangci-lint Integration
 
 `docnamecheck` ships a golangci-lint module plugin. To integrate it:
 
@@ -206,6 +137,84 @@ to automatically apply those edits. The golangci-lint module plugin also respect
              maxdist: 2
    ```
 
+## Examples & Configuration
+
+### What docnamecheck Reports
+
+**Before:**
+```go
+// ServerHTTP handles incoming HTTP requests and routes them
+// to the appropriate handler based on the request path.
+func ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    // implementation
+}
+```
+
+**Output:**
+```
+example.go:1:1: doc comment starts with 'ServerHTTP' but symbol is 'ServeHTTP' (possible typo or old name)
+```
+
+**After fix:**
+```go
+// ServeHTTP handles incoming HTTP requests and routes them
+// to the appropriate handler based on the request path.
+func ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    // implementation
+}
+```
+
+### More Examples
+
+**Levenshtein distance detection:**
+```go
+// confgure sets up the application  <- Typo: "confgure" vs "configure"
+func configure(app *App) error { ... }
+```
+
+**Prefix mismatch:**
+```go
+// newTelemetryHook creates a hook  <- Should be "NewTelemetryHook"
+func NewTelemetryHook() *Hook { ... }
+```
+
+**Narrative comments are allowed:**
+```go
+// Creates a new HTTP client  <- This is fine (starts with "Creates")
+func newHTTPClient() *Client { ... }
+
+// This helper generates test fixtures  <- This is fine (narrative)
+func makeTestData() []byte { ... }
+
+// Generates encryption keys for the session
+func generateKeys() []byte { ... }  <- This is fine (narrative verb)
+```
+
+#### Narrative documentation styles
+
+If your codebase uses narrative verbs like in the examples above, the default `-allowed-leading-words` list already covers common cases (`create`, `generate`, `configure`, etc.). If you use additional narrative verbs, add them:
+
+```bash
+docnamecheck -allowed-leading-words=create,configure,setup,validate,process,handle ./...
+```
+
+#### Prefixed helpers
+
+For codebases with consistent symbol prefixes (e.g., `opThing`, `uiRegister`):
+
+```go
+// Thing does something
+func opThing() { ... }  <- Without -allowed-prefixes, this would be flagged
+```
+
+Configure the allowed prefixes:
+
+```bash
+docnamecheck -allowed-prefixes=op,ui ./...
+```
+
+This allows doc comments to reference `Thing` in the first word when the function is `opThing`, without flagging it as a typo.
+
 ## How It Works
 
 `docnamecheck` uses multiple string matching algorithms to detect likely typos while avoiding false positives on legitimate narrative comments:
@@ -216,7 +225,7 @@ to automatically apply those edits. The golangci-lint module plugin also respect
    - **Damerau-Levenshtein distance**: Catches typos and single-character transpositions
      - Example: `confgure` vs `configure` (distance = 1)
    - **CamelCase transposition detection**: Catches reordered words in camelCase
-     - Example: `ServerHTTP` vs `ServeHTTP` (chunks swapped)
+     - Example: `HTTPServer` vs `ServerHTTP` (chunks swapped)
      - Example: `TelemetryHistoryState` vs `TelemetryHistory` (suffix difference)
    - **Prefix/suffix heuristics**: Catches capitalization mismatches
      - Example: `newTelemetryFilteredHook` vs `NewTelemetryFilteredHook`
@@ -229,54 +238,6 @@ to automatically apply those edits. The golangci-lint module plugin also respect
 4. **Works across all symbol types**: functions, methods, types, and interface methods (based on configuration flags)
 
 Because the analyzer is heuristic, the defaults stay conservative: only unexported symbols are checked out of the box so that it can complement, rather than duplicate, tools such as `godoclint`. Turn on `-include-exported`, `-include-interface-methods`, and `-include-types` when you want broader coverage.
-
-## Configuration Tips
-
-### For codebases with prefixed helpers
-
-If your codebase uses consistent prefixes (e.g., `opThing`, `asmRegister`):
-
-```bash
-docnamecheck -allowed-prefixes=op,asm ./...
-```
-
-This allows doc comments to reference `Thing` in the first word when the function is `opThing`, without flagging this as a typo.
-
-### For narrative documentation styles
-
-If you prefer starting comments with imperative verbs:
-
-```bash
-docnamecheck -allowed-leading-words=create,configure,setup,validate,process ./...
-```
-
-Comments like "Configure sets up the application" won't be flagged for a function named `configure`.
-
-### For strict enforcement
-
-Check everything including exported symbols and types:
-
-```bash
-docnamecheck -include-exported -include-types -include-interface-methods ./...
-```
-
-### Adjusting sensitivity
-
-Increase the distance threshold for looser matching:
-
-```bash
-docnamecheck -maxdist=2 ./...
-```
-
-Default is `1`, which catches single typos or transpositions.
-
-## Related Tools
-
-`docnamecheck` is designed to complement existing Go documentation linters:
-
-- **[revive](https://github.com/mgechev/revive)**: General-purpose linter with exported comment rules. Use `docnamecheck` for unexported symbols or when you want typo detection instead of strict format enforcement.
-- **[godoclint](https://github.com/tommy-muehle/go-mnd)**: Enforces strict "comment must start with name" rules. `docnamecheck` offers a middle ground that allows narrative comments while catching clear errors.
-- **[golangci-lint](https://golangci-lint.run/)**: Meta-linter that can run multiple linters. `docnamecheck` integrates as a module plugin.
 
 ## Troubleshooting
 
