@@ -22,5 +22,5 @@ type TelemetryHistory struct{} // want `doc comment starts with 'TelemetryHistor
 
 type FooServer struct{}
 
-// FooServer.ServeHTTP handles websocket traffic.
+// ServeHTTP handles websocket traffic.
 func (FooServer) ServeHTTPv1() {} // want `doc comment starts with 'ServeHTTP' but symbol is 'ServeHTTPv1' \(possible typo or old name\)`

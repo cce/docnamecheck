@@ -138,18 +138,7 @@ func docFirstWordHasDot(line string) bool {
 	if len(fields) == 0 {
 		return false
 	}
-
-	word := fields[0]
-	idx := strings.IndexByte(word, '.')
-	if idx == -1 {
-		return false
-	}
-
-	prefix := word[:idx]
-	if prefix == "" {
-		return true
-	}
-	return prefix == strings.ToLower(prefix)
+	return strings.Contains(fields[0], ".")
 }
 
 // isNarrativeVerbForm detects verbs like "Creates" when the symbol starts similarly.

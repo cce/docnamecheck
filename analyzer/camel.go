@@ -3,6 +3,9 @@ package analyzer
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
+
+	"github.com/cce/docnametypo/analyzer/internal/camelcase"
 )
 
 // hasCamelChunkReplacement allows a limited number of camel chunks to differ.
@@ -197,42 +200,55 @@ func splitCamelWords(s string) []string {
 	if s == "" {
 		return nil
 	}
-	runes := []rune(s)
-
-	var words []string
-	start := 0
-	for i := 1; i < len(runes); i++ {
-		if camelWordBoundary(runes, i) {
-			if w := strings.ToLower(string(runes[start:i])); w != "" {
-				words = append(words, w)
-			}
-			start = i
-		}
+	if !utf8.ValidString(s) {
+		return []string{strings.ToLower(s)}
 	}
-	if start < len(runes) {
-		if w := strings.ToLower(string(runes[start:])); w != "" {
-			words = append(words, w)
+
+	rawParts := camelcase.Split(s)
+	if len(rawParts) == 0 {
+		return []string{strings.ToLower(s)}
+	}
+
+	words := make([]string, 0, len(rawParts))
+	for i := 0; i < len(rawParts); i++ {
+		part := rawParts[i]
+		if part == "" {
+			continue
 		}
+		if i+1 < len(rawParts) && shouldMergeCamelParts(part, rawParts[i+1]) {
+			part += rawParts[i+1]
+			i++
+		}
+		words = append(words, strings.ToLower(part))
 	}
 	return words
 }
 
-// camelWordBoundary reports whether a boundary occurs before index idx.
-func camelWordBoundary(runes []rune, idx int) bool {
-	prev := runes[idx-1]
-	curr := runes[idx]
-
-	if unicode.IsDigit(prev) != unicode.IsDigit(curr) {
-		return true
+func shouldMergeCamelParts(a, b string) bool {
+	if len(a) != 1 {
+		return false
 	}
-	if unicode.IsLetter(prev) != unicode.IsLetter(curr) {
-		return true
+	rA, _ := utf8.DecodeRuneInString(a)
+	if !unicode.IsUpper(rA) {
+		return false
 	}
-	if unicode.IsLower(prev) && unicode.IsUpper(curr) {
-		return true
+	if len(b) < 2 {
+		return false
 	}
-	if unicode.IsUpper(prev) && unicode.IsUpper(curr) {
-		return idx+1 < len(runes) && unicode.IsLower(runes[idx+1])
+	rB, size := utf8.DecodeRuneInString(b)
+	if !unicode.IsUpper(rB) {
+		return false
 	}
-	return false
+	rest := b[size:]
+	if rest == "" {
+		return false
+	}
+	for len(rest) > 0 {
+		r, s := utf8.DecodeRuneInString(rest)
+		if unicode.IsUpper(r) {
+			return false
+		}
+		rest = rest[s:]
+	}
+	return true
 }

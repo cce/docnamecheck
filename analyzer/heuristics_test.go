@@ -9,6 +9,9 @@ func TestDocFirstWordHasDot(t *testing.T) {
 	}{
 		{"reflect.DeepEqual doesn't work", true},
 		{"foo.Bar is weird", true},
+		{"UID.Event happens", true},
+		{".Hello starts with dot", true},
+		{"This. is a dot after", true},
 		{"ServeHTTP handles", false},
 	}
 	for _, tt := range tests {
