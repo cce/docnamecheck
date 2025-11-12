@@ -82,5 +82,10 @@ func applySettings(s Settings) error {
 			return fmt.Errorf("set allowed-prefixes: %w", err)
 		}
 	}
+	if s.SkipPlainWordCamel != nil {
+		if err := analyzer.Analyzer.Flags.Set("skip-plain-word-camel", strconv.FormatBool(*s.SkipPlainWordCamel)); err != nil {
+			return fmt.Errorf("set skip-plain-word-camel: %w", err)
+		}
+	}
 	return nil
 }

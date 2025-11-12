@@ -33,6 +33,18 @@ func generateKeys() {}
 // note: helper for tests (label should be skipped)
 func notify() {}
 
+// Metrics helpers (section header, should be ignored).
+func clearMetricsHelper() {}
+
+// commonPrefixLen* returns the shared prefix length. (wildcard token should be ignored)
+func commonPrefixLenBytes() {}
+
+// Delete removes devices (narrative word handled by skip-plain-word-camel).
+func deleteDevice() {}
+
+// validate that helper outputs do not overlap. (narrative sentence intro)
+func valid() {}
+
 // ServeHTTP handles requests but the identifier is unexported so the analyzer should still flag it.
 func serveHHTP() {} // want `doc comment starts with 'ServeHTTP' but symbol is 'serveHHTP' \(possible typo or old name\)`
 

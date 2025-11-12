@@ -55,6 +55,8 @@ func ServeHTTP(w http.ResponseWriter, r *http.Request) { ... }
 - **Capitalization patterns**: Flags `NewHandler` in comments when the function is `newHandler`
 - **Narrative detection**: Skips comments starting with verbs like `Creates`, `Initializes`, `Generates`, etc.
 - **Prefix handling**: Allows configured prefixes like `op` to be stripped before matching
+- **Section headers & wildcards**: Treats heading-style comments (`Metrics helpers`, etc.) and tokens containing wildcards (like `commonPrefixLen*`) as documentation sections instead of identifier references.
+- **Plain-word vs camelCase (flagged)**: With `-skip-plain-word-camel` (enabled by default), simple leading verbs such as `Delete` or `Add` are treated as narrative when the function name contains extra camelCase chunks.
 
 These heuristics work together to distinguish probable typos from other types of comments.
 
@@ -84,6 +86,7 @@ The analyzer understands several flags:
 | `-include-interface-methods` | `false` | Check interface method declarations. Useful when interface docs must track implementation names. |
 | `-allowed-leading-words` | *(see note)* | Comma-separated verbs treated as narrative intros (e.g. `Create`, `Configure`, `Tests`); matching comments are skipped. |
 | `-allowed-prefixes` | `` | Comma-separated list of symbol prefixes (such as `op`) that may be stripped before comparing to the doc token. |
+| `-skip-plain-word-camel` | `true` | Skip simple leading words (e.g. `Delete`, `Add`) when the symbol contains camelCase segments to reduce narrative false positives. Set to `false` if you want to flag those cases. |
 
 > **Note:** the default `-allowed-leading-words` list is `create,creates,creating,initialize,initializes,init,configure,configures,setup,setups,start,starts,read,reads,write,writes,send,sends,generate,generates,decode,decodes,encode,encodes,marshal,marshals,unmarshal,unmarshals,apply,applies,process,processes,make,makes,build,builds,test,tests`.
 

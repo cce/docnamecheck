@@ -10,4 +10,5 @@ type Settings struct {
 	IncludeInterfaceMethods *bool   `json:"include-interface-methods,omitempty"`
 	AllowedLeadingWords     *string `json:"allowed-leading-words,omitempty"`
 	AllowedPrefixes         *string `json:"allowed-prefixes,omitempty"`
+	SkipPlainWordCamel      *bool   `json:"skip-plain-word-camel,omitempty"`
 }

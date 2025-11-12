@@ -47,6 +47,17 @@ func TestAnalyzer(t *testing.T) {
 		allowedPrefixesFlag = "asm,op"
 		analysistest.Run(t, analysistest.TestData(), Analyzer, "prefixaliases")
 	})
+
+	t.Run("plainWordCamelFlag", func(t *testing.T) {
+		resetFlags()
+		analysistest.Run(t, analysistest.TestData(), Analyzer, "plainwordcamel")
+	})
+
+	t.Run("plainWordCamelFlagDisabled", func(t *testing.T) {
+		resetFlags()
+		skipPlainWordCamelFlag = false
+		analysistest.Run(t, analysistest.TestData(), Analyzer, "plainwordcamelexpect")
+	})
 }
 
 func resetFlags() {
@@ -58,4 +69,5 @@ func resetFlags() {
 	includeInterfaceMethodsFlag = false
 	allowedLeadingWordsFlag = defaultAllowedLeadingWords
 	allowedPrefixesFlag = ""
+	skipPlainWordCamelFlag = true
 }

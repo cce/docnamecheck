@@ -26,6 +26,7 @@ var (
 	includeInterfaceMethodsFlag = false
 	allowedLeadingWordsFlag     = defaultAllowedLeadingWords
 	allowedPrefixesFlag         = ""
+	skipPlainWordCamelFlag      = true
 )
 
 type matchConfig struct {
@@ -110,6 +111,7 @@ func newAnalyzer() *analysis.Analyzer {
 	a.Flags.BoolVar(&includeInterfaceMethodsFlag, "include-interface-methods", false, "check interface method declarations")
 	a.Flags.StringVar(&allowedLeadingWordsFlag, "allowed-leading-words", defaultAllowedLeadingWords, "comma-separated list of leading words to ignore (treated as narrative)")
 	a.Flags.StringVar(&allowedPrefixesFlag, "allowed-prefixes", "", "comma-separated list of symbol prefixes to ignore when matching doc tokens")
+	a.Flags.BoolVar(&skipPlainWordCamelFlag, "skip-plain-word-camel", true, "skip plain leading words when the symbol looks camelCase (reduces narrative false positives)")
 
 	return a
 }
@@ -191,7 +193,7 @@ func checkSymbol(pass *analysis.Pass, cfg matchConfig, doc *ast.CommentGroup, na
 		return
 	}
 
-	firstTok, tokStart, tokEnd := firstIdentifierLike(doc)
+	firstTok, tokStart, tokEnd, docLine := firstIdentifierLike(doc)
 	if firstTok == "" || len(firstTok) < minDocTokenLen {
 		return
 	}
@@ -204,7 +206,23 @@ func checkSymbol(pass *analysis.Pass, cfg matchConfig, doc *ast.CommentGroup, na
 		return
 	}
 
+	if isSectionHeader(firstTok, docLine) {
+		return
+	}
+
+	if isNarrativeSentenceIntro(firstTok, docLine) {
+		return
+	}
+
+	if containsWildcardToken(firstTok, docLine) {
+		return
+	}
+
 	if kind == kindFunc && isNarrativeVerbForm(firstTok, name) {
+		return
+	}
+
+	if skipPlainWordCamelFlag && looksLikeSimpleWord(firstTok) && hasCamelCaseInterior(name) {
 		return
 	}
 
@@ -248,23 +266,24 @@ func checkSymbol(pass *analysis.Pass, cfg matchConfig, doc *ast.CommentGroup, na
 
 // firstIdentifierLike extracts the first identifier-looking token from the first non-empty
 // line of a comment group (skipping common labels like Deprecated:). It also returns the
-// exact token.Pos range so a SuggestedFix can rewrite the token in-place.
-func firstIdentifierLike(cg *ast.CommentGroup) (string, token.Pos, token.Pos) {
+// exact token.Pos range so a SuggestedFix can rewrite the token in-place, and the
+// trimmed first line for additional heuristics.
+func firstIdentifierLike(cg *ast.CommentGroup) (string, token.Pos, token.Pos, string) {
 	if cg == nil || len(cg.List) == 0 {
-		return "", token.NoPos, token.NoPos
+		return "", token.NoPos, token.NoPos, ""
 	}
 	comment := cg.List[0]
 	line, lineOffset := firstDocLine(comment.Text)
 	if line == "" {
-		return "", token.NoPos, token.NoPos
+		return "", token.NoPos, token.NoPos, ""
 	}
 	id, rel := identifierFromLine(line)
 	if id == "" {
-		return "", token.NoPos, token.NoPos
+		return "", token.NoPos, token.NoPos, line
 	}
 	start := comment.Slash + token.Pos(lineOffset+rel)
 	end := start + token.Pos(len(id))
-	return id, start, end
+	return id, start, end, line
 }
 
 func firstDocLine(raw string) (string, int) {
@@ -686,6 +705,118 @@ func hasSmallChunkDifference(a, b string, maxChunk int) bool {
 		}
 	}
 	return false
+}
+
+var sectionHeaderSecondWords = map[string]struct{}{
+	"helper":   {},
+	"helpers":  {},
+	"section":  {},
+	"sections": {},
+	"overview": {},
+	"summary":  {},
+}
+
+var narrativeSecondWords = map[string]struct{}{
+	"that":    {},
+	"the":     {},
+	"a":       {},
+	"an":      {},
+	"this":    {},
+	"these":   {},
+	"those":   {},
+	"whether": {},
+	"if":      {},
+}
+
+func isSectionHeader(firstTok, line string) bool {
+	if firstTok == "" || line == "" {
+		return false
+	}
+	fields := strings.Fields(line)
+	if len(fields) < 2 {
+		return false
+	}
+	first := stripWordToken(fields[0])
+	if !strings.EqualFold(firstTok, first) {
+		return false
+	}
+	second := strings.ToLower(stripWordToken(fields[1]))
+	if second == "" {
+		return false
+	}
+	_, ok := sectionHeaderSecondWords[second]
+	return ok
+}
+
+func isNarrativeSentenceIntro(firstTok, line string) bool {
+	if !looksLikeSimpleWord(firstTok) || line == "" {
+		return false
+	}
+	fields := strings.Fields(line)
+	if len(fields) < 2 {
+		return false
+	}
+	first := stripWordToken(fields[0])
+	if !strings.EqualFold(firstTok, first) {
+		return false
+	}
+	second := strings.ToLower(stripWordToken(fields[1]))
+	if second == "" {
+		return false
+	}
+	_, ok := narrativeSecondWords[second]
+	return ok
+}
+
+func containsWildcardToken(token, line string) bool {
+	if strings.ContainsAny(token, "*?[]") {
+		return true
+	}
+	if token == "" || line == "" {
+		return false
+	}
+	lowerLine := strings.ToLower(line)
+	lowerToken := strings.ToLower(token)
+	if strings.HasPrefix(lowerLine, lowerToken) {
+		if len(lowerLine) > len(lowerToken) {
+			next := lowerLine[len(lowerToken)]
+			return next == '*'
+		}
+	}
+	return false
+}
+
+func looksLikeSimpleWord(word string) bool {
+	if word == "" {
+		return false
+	}
+	runes := []rune(word)
+	for _, r := range runes {
+		if !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	if len(runes) == 1 {
+		return true
+	}
+	rest := strings.ToLower(string(runes[1:]))
+	if rest != string(runes[1:]) {
+		return false
+	}
+	return unicode.IsLower(runes[0]) || unicode.IsUpper(runes[0])
+}
+
+func hasCamelCaseInterior(name string) bool {
+	for i, r := range name {
+		if unicode.IsUpper(r) && i > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func stripWordToken(word string) string {
+	return strings.Trim(word, " \t:.,;\r\n-*")
 }
 
 // damerauLevenshtein computes the optimal string edit distance with transpositions.
