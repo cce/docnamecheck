@@ -205,24 +205,6 @@ func extractIdentifierToken(word string) (string, int) {
 	if word == "" {
 		return "", 0
 	}
-	if strings.Contains(word, ".") {
-		parts := strings.Split(word, ".")
-		offsets := make([]int, len(parts))
-		off := 0
-		for i, part := range parts {
-			offsets[i] = off
-			off += len(part)
-			if i < len(parts)-1 {
-				off++
-			}
-		}
-		for i := len(parts) - 1; i >= 0; i-- {
-			trimmed, removed := trimPointerPrefixes(parts[i])
-			if id, _ := leadingIdentRun(trimmed); id != "" {
-				return id, offsets[i] + removed
-			}
-		}
-	}
 	trimmed, removed := trimPointerPrefixes(word)
 	if id, _ := leadingIdentRun(trimmed); id != "" {
 		return id, removed

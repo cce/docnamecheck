@@ -12,7 +12,7 @@ func newTelemetryFilteredHook() telemetryFilteredHook { // want `doc comment sta
 
 type fooServer struct{}
 
-// fooServer.serveHTTP handles HTTP requests.
+// serveHTTP handles HTTP requests.
 func (fooServer) serveHTTPv1() {} // want `doc comment starts with 'serveHTTP' but symbol is 'serveHTTPv1' \(possible typo or old name\)`
 
 // decodePage updates cache entries.
