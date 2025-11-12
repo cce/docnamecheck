@@ -58,10 +58,21 @@ func TestAnalyzer(t *testing.T) {
 		skipPlainWordCamelFlag = false
 		analysistest.Run(t, analysistest.TestData(), Analyzer, "plainwordcamelexpect")
 	})
+
+	t.Run("maxDistanceGate", func(t *testing.T) {
+		resetFlags()
+		maxDistFlag = 5
+		analysistest.Run(t, analysistest.TestData(), Analyzer, "maxdistance")
+	})
+
+	t.Run("camelChunkHeuristics", func(t *testing.T) {
+		resetFlags()
+		analysistest.Run(t, analysistest.TestData(), Analyzer, "camelchunks")
+	})
 }
 
 func resetFlags() {
-	maxDistFlag = 1
+	maxDistFlag = 5
 	includeUnexportedFlag = true
 	includeExportedFlag = false
 	includeTypesFlag = false
@@ -70,4 +81,6 @@ func resetFlags() {
 	allowedLeadingWordsFlag = defaultAllowedLeadingWords
 	allowedPrefixesFlag = ""
 	skipPlainWordCamelFlag = true
+	maxCamelChunkInsertFlag = 2
+	maxCamelChunkReplaceFlag = 2
 }

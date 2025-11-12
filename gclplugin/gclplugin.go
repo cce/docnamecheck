@@ -87,5 +87,15 @@ func applySettings(s Settings) error {
 			return fmt.Errorf("set skip-plain-word-camel: %w", err)
 		}
 	}
+	if s.MaxCamelChunkInsert != nil {
+		if err := analyzer.Analyzer.Flags.Set("max-camel-chunk-insert", strconv.Itoa(*s.MaxCamelChunkInsert)); err != nil {
+			return fmt.Errorf("set max-camel-chunk-insert: %w", err)
+		}
+	}
+	if s.MaxCamelChunkReplace != nil {
+		if err := analyzer.Analyzer.Flags.Set("max-camel-chunk-replace", strconv.Itoa(*s.MaxCamelChunkReplace)); err != nil {
+			return fmt.Errorf("set max-camel-chunk-replace: %w", err)
+		}
+	}
 	return nil
 }

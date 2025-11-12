@@ -57,6 +57,8 @@ func ServeHTTP(w http.ResponseWriter, r *http.Request) { ... }
 - **Prefix handling**: Allows configured prefixes like `op` to be stripped before matching
 - **Section headers & wildcards**: Treats heading-style comments (`Metrics helpers`, etc.) and tokens containing wildcards (like `commonPrefixLen*`) as documentation sections instead of identifier references.
 - **Plain-word vs camelCase (flagged)**: With `-skip-plain-word-camel` (enabled by default), simple leading verbs such as `Delete` or `Add` are treated as narrative when the function name contains extra camelCase chunks.
+- **Distance gating**: Even though `-maxdist` defaults to 5, matches only trigger when enough of the token overlaps (long shared prefix/suffix), preventing short English sentences from being misinterpreted as identifiers.
+- **Camel chunk heuristics**: Detects inserted/removed camelCase chunks and whole-word replacements (`handleVolume` vs `handleEphemeralVolume`, `processCIDRs` vs `validateCIDRs`) without needing large edit distances.
 
 These heuristics work together to distinguish probable typos from other types of comments.
 
@@ -78,7 +80,7 @@ The analyzer understands several flags:
 | --- | --- | --- |
 | `-fix` | `false` | Apply all suggested fixes to rewrite incorrect identifier tokens in doc comments. |
 | `-test` | `true` | Analyze test files in addition to regular source files. |
-| `-maxdist` | `1` | Maximum Damerau-Levenshtein distance before a pair of words stops being considered a typo. |
+| `-maxdist` | `5` | Maximum Damerau-Levenshtein distance before a pair of words stops being considered a typo (guarded by a length/proportion gate to avoid matching whole sentences). |
 | `-include-unexported` | `true` | Check unexported functions/methods/types. This is the primary use case. |
 | `-include-exported` | `false` | Also check exported declarations. Enable this if you do not already enforce `// Name ...` elsewhere. |
 | `-include-types` | `false` | Extend the check to `type` declarations (honoring the exported/unexported switches above). |
@@ -87,6 +89,8 @@ The analyzer understands several flags:
 | `-allowed-leading-words` | *(see note)* | Comma-separated verbs treated as narrative intros (e.g. `Create`, `Configure`, `Tests`); matching comments are skipped. |
 | `-allowed-prefixes` | `` | Comma-separated list of symbol prefixes (such as `op`) that may be stripped before comparing to the doc token. |
 | `-skip-plain-word-camel` | `true` | Skip simple leading words (e.g. `Delete`, `Add`) when the symbol contains camelCase segments to reduce narrative false positives. Set to `false` if you want to flag those cases. |
+| `-max-camel-chunk-insert` | `2` | Maximum number of camelCase chunks that can be inserted or removed before comments stop being treated as typos. |
+| `-max-camel-chunk-replace` | `2` | Maximum number of camelCase chunks that can be replaced before comments stop being treated as typos. |
 
 > **Note:** the default `-allowed-leading-words` list is `create,creates,creating,initialize,initializes,init,configure,configures,setup,setups,start,starts,read,reads,write,writes,send,sends,generate,generates,decode,decodes,encode,encodes,marshal,marshals,unmarshal,unmarshals,apply,applies,process,processes,make,makes,build,builds,test,tests`.
 

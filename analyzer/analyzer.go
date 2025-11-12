@@ -18,7 +18,7 @@ import (
 const defaultAllowedLeadingWords = "create,creates,creating,initialize,initializes,init,configure,configures,setup,setups,start,starts,read,reads,write,writes,send,sends,generate,generates,decode,decodes,encode,encodes,marshal,marshals,unmarshal,unmarshals,apply,applies,process,processes,make,makes,build,builds,test,tests"
 
 var (
-	maxDistFlag                 = 1
+	maxDistFlag                 = 5
 	includeUnexportedFlag       = true
 	includeExportedFlag         = false
 	includeTypesFlag            = false
@@ -27,6 +27,8 @@ var (
 	allowedLeadingWordsFlag     = defaultAllowedLeadingWords
 	allowedPrefixesFlag         = ""
 	skipPlainWordCamelFlag      = true
+	maxCamelChunkInsertFlag     = 2
+	maxCamelChunkReplaceFlag    = 2
 )
 
 type matchConfig struct {
@@ -103,15 +105,17 @@ func newAnalyzer() *analysis.Analyzer {
 		Requires: []*analysis.Analyzer{inspect.Analyzer},
 	}
 
-	a.Flags.IntVar(&maxDistFlag, "maxdist", 1, "maximum Damerau-Levenshtein distance to consider a likely typo")
-	a.Flags.BoolVar(&includeUnexportedFlag, "include-unexported", true, "check unexported declarations")
-	a.Flags.BoolVar(&includeExportedFlag, "include-exported", false, "check exported declarations (disabled by default)")
-	a.Flags.BoolVar(&includeTypesFlag, "include-types", false, "also check type declarations")
-	a.Flags.BoolVar(&includeGeneratedFlag, "include-generated", false, "check files marked as generated")
-	a.Flags.BoolVar(&includeInterfaceMethodsFlag, "include-interface-methods", false, "check interface method declarations")
-	a.Flags.StringVar(&allowedLeadingWordsFlag, "allowed-leading-words", defaultAllowedLeadingWords, "comma-separated list of leading words to ignore (treated as narrative)")
-	a.Flags.StringVar(&allowedPrefixesFlag, "allowed-prefixes", "", "comma-separated list of symbol prefixes to ignore when matching doc tokens")
-	a.Flags.BoolVar(&skipPlainWordCamelFlag, "skip-plain-word-camel", true, "skip plain leading words when the symbol looks camelCase (reduces narrative false positives)")
+	a.Flags.IntVar(&maxDistFlag, "maxdist", maxDistFlag, "maximum Damerau-Levenshtein distance to consider a likely typo")
+	a.Flags.BoolVar(&includeUnexportedFlag, "include-unexported", includeUnexportedFlag, "check unexported declarations")
+	a.Flags.BoolVar(&includeExportedFlag, "include-exported", includeExportedFlag, "check exported declarations (disabled by default)")
+	a.Flags.BoolVar(&includeTypesFlag, "include-types", includeTypesFlag, "also check type declarations")
+	a.Flags.BoolVar(&includeGeneratedFlag, "include-generated", includeGeneratedFlag, "check files marked as generated")
+	a.Flags.BoolVar(&includeInterfaceMethodsFlag, "include-interface-methods", includeInterfaceMethodsFlag, "check interface method declarations")
+	a.Flags.StringVar(&allowedLeadingWordsFlag, "allowed-leading-words", allowedLeadingWordsFlag, "comma-separated list of leading words to ignore (treated as narrative)")
+	a.Flags.StringVar(&allowedPrefixesFlag, "allowed-prefixes", allowedPrefixesFlag, "comma-separated list of symbol prefixes to ignore when matching doc tokens")
+	a.Flags.BoolVar(&skipPlainWordCamelFlag, "skip-plain-word-camel", skipPlainWordCamelFlag, "skip plain leading words when the symbol looks camelCase (reduces narrative false positives)")
+	a.Flags.IntVar(&maxCamelChunkInsertFlag, "max-camel-chunk-insert", maxCamelChunkInsertFlag, "maximum number of camelCase chunks that may be inserted or removed (detects missing words)")
+	a.Flags.IntVar(&maxCamelChunkReplaceFlag, "max-camel-chunk-replace", maxCamelChunkReplaceFlag, "maximum number of camelCase chunks that may be replaced (detects word changes)")
 
 	return a
 }
@@ -227,14 +231,17 @@ func checkSymbol(pass *analysis.Pass, cfg matchConfig, doc *ast.CommentGroup, na
 	}
 
 	lenDiff := abs(len(firstTok) - len(name))
-	if lenDiff > maxDistFlag+1 && lenDiff > maxChunkDiffSize {
-		return
+	var docLower, nameLower string
+	match := false
+	if lenDiff <= maxDistFlag+1 || lenDiff <= maxChunkDiffSize {
+		docLower = strings.ToLower(firstTok)
+		nameLower = strings.ToLower(name)
+		d := damerauLevenshtein(docLower, nameLower)
+		match = d > 0 && d <= maxDistFlag
+		if match && !passesDistanceGate(docLower, nameLower, d) {
+			match = false
+		}
 	}
-
-	docLower := strings.ToLower(firstTok)
-	nameLower := strings.ToLower(name)
-	d := damerauLevenshtein(docLower, nameLower)
-	match := d > 0 && d <= maxDistFlag
 	if !match && isCamelSwapVariant(firstTok, name) {
 		match = true
 	}
@@ -244,7 +251,13 @@ func checkSymbol(pass *analysis.Pass, cfg matchConfig, doc *ast.CommentGroup, na
 	if !match && hasSimilarCamelWord(firstTok, name) {
 		match = true
 	}
-	if !match && hasSmallChunkDifference(docLower, nameLower, maxChunkDiffSize) {
+	if !match && hasCamelChunkReplacement(firstTok, name, maxCamelChunkReplaceFlag) {
+		match = true
+	}
+	if !match && hasCamelChunkInsertionOrRemoval(firstTok, name, maxCamelChunkInsertFlag) {
+		match = true
+	}
+	if !match && nameLower != "" && docLower != "" && hasSmallChunkDifference(docLower, nameLower, maxChunkDiffSize) {
 		match = true
 	}
 	if match {
@@ -707,6 +720,76 @@ func hasSmallChunkDifference(a, b string, maxChunk int) bool {
 	return false
 }
 
+func hasCamelChunkReplacement(docToken, symbol string, maxMismatch int) bool {
+	if maxMismatch <= 0 {
+		return false
+	}
+	docWords := splitCamelWords(docToken)
+	symWords := splitCamelWords(symbol)
+	if len(docWords) == 0 || len(docWords) != len(symWords) {
+		return false
+	}
+	if len(docWords) < 2 {
+		return false
+	}
+	mismatches := 0
+	matches := 0
+	for i := range docWords {
+		if docWords[i] == symWords[i] {
+			matches++
+			continue
+		}
+		mismatches++
+		if mismatches > maxMismatch {
+			return false
+		}
+	}
+	if mismatches == 0 {
+		return false
+	}
+	return matches >= len(docWords)-maxMismatch && matches > 0
+}
+
+func hasCamelChunkInsertionOrRemoval(docToken, symbol string, maxChunkDiff int) bool {
+	if maxChunkDiff <= 0 {
+		return false
+	}
+	docWords := splitCamelWords(docToken)
+	symWords := splitCamelWords(symbol)
+	if len(docWords) == 0 || len(symWords) == 0 {
+		return false
+	}
+	diff := abs(len(docWords) - len(symWords))
+	if diff == 0 || diff > maxChunkDiff {
+		return false
+	}
+	if len(docWords) > len(symWords) {
+		return camelSubsequence(symWords, docWords, maxChunkDiff)
+	}
+	return camelSubsequence(docWords, symWords, maxChunkDiff)
+}
+
+func camelSubsequence(shorter, longer []string, maxSkips int) bool {
+	if len(shorter) == 0 || len(longer) == 0 {
+		return false
+	}
+	i, j := 0, 0
+	skips := 0
+	for i < len(shorter) && j < len(longer) {
+		if shorter[i] == longer[j] {
+			i++
+			j++
+			continue
+		}
+		j++
+		skips++
+		if skips > maxSkips {
+			return false
+		}
+	}
+	return i == len(shorter) && (len(shorter) > 0)
+}
+
 var sectionHeaderSecondWords = map[string]struct{}{
 	"helper":   {},
 	"helpers":  {},
@@ -817,6 +900,37 @@ func hasCamelCaseInterior(name string) bool {
 
 func stripWordToken(word string) string {
 	return strings.Trim(word, " \t:.,;\r\n-*")
+}
+
+func passesDistanceGate(doc, name string, dist int) bool {
+	if dist <= 0 {
+		return false
+	}
+	docLen := len(doc)
+	nameLen := len(name)
+	if docLen < minDocTokenLen+dist {
+		return false
+	}
+	if nameLen < minDocTokenLen {
+		return false
+	}
+	sharedPrefix := commonPrefixLength(doc, name)
+	sharedSuffix := commonSuffixLength(doc, name)
+	shared := sharedPrefix + sharedSuffix
+	if shared > docLen {
+		shared = docLen
+	}
+	required := docLen - dist
+	if required < minDocTokenLen {
+		required = minDocTokenLen
+	}
+	if shared >= required {
+		return true
+	}
+	if docLen >= 2*minDocTokenLen && shared*2 >= docLen && docLen-shared <= dist {
+		return true
+	}
+	return false
 }
 
 // damerauLevenshtein computes the optimal string edit distance with transpositions.

@@ -11,4 +11,6 @@ type Settings struct {
 	AllowedLeadingWords     *string `json:"allowed-leading-words,omitempty"`
 	AllowedPrefixes         *string `json:"allowed-prefixes,omitempty"`
 	SkipPlainWordCamel      *bool   `json:"skip-plain-word-camel,omitempty"`
+	MaxCamelChunkInsert     *int    `json:"max-camel-chunk-insert,omitempty"`
+	MaxCamelChunkReplace    *int    `json:"max-camel-chunk-replace,omitempty"`
 }
